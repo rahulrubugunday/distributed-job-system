@@ -3,10 +3,11 @@ import fs from 'fs/promises';
 import path from 'path';
 import { pool } from './db';
 import { connection, jobQueue } from './queue';
+import os from 'os';
 
 const RESULTS_DIR = path.join(process.cwd(), 'results');
 
-const WORKER_NAME = process.env.WORKER_NAME ?? `worker-${process.pid}`;
+const WORKER_NAME = process.env.WORKER_NAME ?? os.hostname();
 
 const worker = new Worker(
     'jobs',
