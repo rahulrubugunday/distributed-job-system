@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: api
-          image: job-system:v1
+          image: job-system:v3
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
@@ -23,6 +23,25 @@ spec:
                 name: app-secret
           ports:
             - containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
 ---
 apiVersion: v1
 kind: Service

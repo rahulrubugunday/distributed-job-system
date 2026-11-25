@@ -37,7 +37,7 @@ const worker = new Worker(
     }
 
     // 3. Pretend this is slow work (5 seconds)
-    const durationMs = payload.durationMs ?? 5000;
+    const durationMs = Math.min(payload.durationMs ?? 5000, 60000);
     await new Promise((resolve) => setTimeout(resolve, durationMs));
     // 4. Generate the report as a CSV file
     const csv =

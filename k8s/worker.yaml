@@ -3,7 +3,6 @@ kind: Deployment
 metadata:
   name: worker
 spec:
-  replicas: 3
   selector:
     matchLabels:
       app: worker
@@ -14,7 +13,7 @@ spec:
     spec:
       containers:
         - name: worker
-          image: job-system:v1
+          image: job-system:v3
           imagePullPolicy: IfNotPresent
           command: ["npx", "tsx", "src/worker.ts"]
           envFrom:
@@ -22,3 +21,10 @@ spec:
                 name: app-config
             - secretRef:
                 name: app-secret
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
