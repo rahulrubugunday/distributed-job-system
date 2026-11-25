@@ -9,10 +9,38 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-  # ---------------------------------------
+
   redis:
     image: redis:7
     ports:
       - "6379:6379"
+  api:
+    build: .
+    init: true
+    environment:
+      DATABASE_URL: postgresql://jobs:jobs@postgres:5432/jobs
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+      - redis
+
+  worker:
+    build: .
+    init: true
+    command: ["npx", "tsx", "src/worker.ts"]
+    environment:
+      DATABASE_URL: postgresql://jobs:jobs@postgres:5432/jobs
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CONCURRENCY: 2
+    volumes:
+      - ./results:/app/results
+    depends_on:
+      - postgres
+      - redis
 volumes:
   pgdata:
