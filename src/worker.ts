@@ -4,10 +4,35 @@ import path from 'path';
 import { pool } from './db';
 import { connection, jobQueue } from './queue';
 import os from 'os';
+import http from 'node:http';
+import { register, jobsProcessed, jobDuration } from './metrics';
+
 
 const RESULTS_DIR = path.join(process.cwd(), 'results');
 
 const WORKER_NAME = process.env.WORKER_NAME ?? os.hostname();
+
+const METRICS_PORT = Number(process.env.METRICS_PORT ?? 9100);
+
+const metricsServer = http.createServer(async (req, res) => {
+  if (req.url === '/metrics') {
+    res.setHeader('Content-Type', register.contentType);
+    res.end(await register.metrics());
+  } else if (req.url === '/health') {
+    res.end('ok');
+  } else {
+    res.statusCode = 404;
+    res.end();
+  }
+});
+
+metricsServer.listen(METRICS_PORT, () =>
+  console.log(`[${WORKER_NAME}] Metrics on :${METRICS_PORT}`),
+);
+
+// Pre-create label series at 0 so rate() sees the first increment
+jobsProcessed.inc({ status: 'completed' }, 0);
+jobsProcessed.inc({ status: 'failed' }, 0);
 
 const worker = new Worker(
     'jobs',
@@ -28,6 +53,8 @@ const worker = new Worker(
         console.log(`Skipping job ${jobId}, it was cancelled or already finished`);
         return;
     }
+
+    const endTimer = jobDuration.startTimer();
 
     // 2. Read the full job from Postgres
     const result = await pool.query('SELECT payload FROM jobs WHERE id = $1', [jobId]);
@@ -52,6 +79,9 @@ const worker = new Worker(
         "UPDATE jobs SET status = 'COMPLETED', completed_at = now() WHERE id = $1",
         [jobId]
     );
+    endTimer();                                  
+    jobsProcessed.inc({ status: 'completed'}); 
+
     console.log(`[${WORKER_NAME}] Completed job ${jobId}`);
     },
     {
@@ -71,6 +101,7 @@ worker.on('failed', async (bullJob, err) => {
       "UPDATE jobs SET status = 'FAILED', error_message = $2 WHERE id = $1",
       [bullJob.data.jobId, err.message]
     );
+    jobsProcessed.inc({ status: 'failed' }); 
     console.error(`Job ${bullJob.data.jobId} FAILED for good after ${bullJob.attemptsMade} attempts`);
   } else {
     await pool.query(
@@ -114,6 +145,7 @@ async function shutdown(signal: string) {
 
     console.log(`${signal} received, finishing current job before stopping...`);
     clearInterval(reconcileTimer);
+    metricsServer.close();              
 
     await worker.close();
     await jobQueue.close();

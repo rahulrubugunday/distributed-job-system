@@ -1,10 +1,28 @@
 import express from 'express';
 import { pool } from './db';
 import { jobQueue } from './queue';
+import { httpRequestDuration, register } from './metrics';
 
 
 export const app = express();
+
+// Time every request; label by route PATTERN to keep cardinality low
+app.use((req, res, next) => {
+  if (req.path === '/metrics') return next();
+  const end = httpRequestDuration.startTimer();
+  res.on('finish', () => {
+    const route = req.route ? req.baseUrl + req.route.path : 'unmatched';
+    end({ method: req.method, route, status: String(res.statusCode) });
+  });
+  next();
+});
+
 app.use(express.json());
+
+app.get('/metrics', async (_req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.send(await register.metrics());
+});
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
